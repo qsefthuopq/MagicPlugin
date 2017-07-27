@@ -222,7 +222,6 @@ public class Wand extends WandProperties implements CostReducer, com.elmakers.mi
     private WandMode brushMode = null;
 	private int openInventoryPage = 0;
 	private boolean inventoryIsOpen = false;
-	private boolean inventoryWasOpen = false;
 	private Inventory displayInventory = null;
 	private int currentHotbar = 0;
 	
@@ -3083,7 +3082,6 @@ public class Wand extends WandProperties implements CostReducer, com.elmakers.mi
     public void closeInventory() {
 		if (!isInventoryOpen()) return;
         controller.disableItemSpawn();
-		inventoryWasOpen = true;
         WandMode mode = getMode();
         try {
             saveInventory();
@@ -3142,7 +3140,6 @@ public class Wand extends WandProperties implements CostReducer, com.elmakers.mi
             }
         }
         controller.enableItemSpawn();
-		inventoryWasOpen = false;
 
 		saveState();
 	}
@@ -3440,11 +3437,6 @@ public class Wand extends WandProperties implements CostReducer, com.elmakers.mi
 	@Override
 	public boolean isInventoryOpen() {
 		return mage != null && inventoryIsOpen;
-	}
-
-	// Somewhat hacky method to handle inventory close event knowing that this was a wand inventory that just closed.
-	public boolean wasInventoryOpen() {
-    	return inventoryWasOpen;
 	}
 	
 	@Override
@@ -4046,7 +4038,16 @@ public class Wand extends WandProperties implements CostReducer, com.elmakers.mi
             alphabetizeInventory();
         }
 
-		forceUpdate = checkInventoryForUpgrades();
+        // Check for spell or other special icons in the player's inventory
+        Inventory inventory = player.getInventory();
+        ItemStack[] items = inventory.getContents();
+        for (int i = 0; i < items.length; i++) {
+            ItemStack item = items[i];
+            if (addItem(item)) {
+                inventory.setItem(i, null);
+                forceUpdate = true;
+            }
+        }
 
         // Check for auto-bind
         if (bound)
@@ -4092,25 +4093,6 @@ public class Wand extends WandProperties implements CostReducer, com.elmakers.mi
 
         return true;
     }
-
-    public boolean checkInventoryForUpgrades() {
-		boolean updated = false;
-		Player player = mage == null ? null : mage.getPlayer();
-		if (player == null) return false;
-
-		// Check for spell or other special icons in the player's inventory
-		Inventory inventory = player.getInventory();
-		ItemStack[] items = inventory.getContents();
-		for (int i = 0; i < items.length; i++) {
-			ItemStack item = items[i];
-			if (addItem(item)) {
-				inventory.setItem(i, null);
-				updated = true;
-			}
-		}
-
-		return updated;
-	}
 
     @Override
 	public boolean organizeInventory() {
@@ -4668,8 +4650,11 @@ public class Wand extends WandProperties implements CostReducer, com.elmakers.mi
         PlayerInventory inventory = player.getInventory();
 		storedInventory = CompatibilityUtils.createInventory(null, PLAYER_INVENTORY_SIZE, "Stored Inventory");
 		for (int i = 0; i < PLAYER_INVENTORY_SIZE; i++) {
+			// Make sure we don't store any spells or magical materials, just in case
 			ItemStack item = inventory.getItem(i);
-			storedInventory.setItem(i, item);
+			if (!Wand.isSpell(item) || Wand.isSkill(item)) {
+				storedInventory.setItem(i, item);
+			}
 			inventory.setItem(i, null);
 		}
 		inventory.setItem(heldSlot, item);
